@@ -3,12 +3,63 @@
  */
 package donbal;
 
+import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.streaming.StreamingQuery;
+import org.apache.spark.sql.streaming.StreamingQueryException;
+import org.apache.spark.sql.Row;
+
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.concurrent.TimeoutException;
+
+import org.apache.spark.api.java.function.FlatMapFunction;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Encoders;
+
 public class App {
-    public String getGreeting() {
-        return "Hello World!";
+  public static void main(String[] args) {
+    SparkSession spark = SparkSession
+        .builder()
+        .master("local")
+        .appName("Donbal")
+        .getOrCreate();
+
+    // create DataFrame representing the stream of input lines from connection to
+    // localhost:1378.
+    // use server.py to have server on 1378
+    Dataset<Row> lines = spark
+        .readStream()
+        .format("socket")
+        .option("host", "localhost")
+        .option("port", 1378)
+        .load();
+
+    // split the lines into words with space
+    Dataset<String> words = lines
+        .as(Encoders.STRING())
+        .flatMap(new FlatMapFunction<String, String>() {
+
+          @Override
+          public Iterator<String> call(String t) throws Exception {
+            return Arrays.asList(t.split(" ")).iterator();
+          }
+
+        }, Encoders.STRING());
+
+    // groups words if they are the same and then count them.
+    Dataset<WordCount> wordCounts = words.groupBy("value").count().as(Encoders.bean(WordCount.class));
+
+    // start running the query that prints the running counts to the console
+    try {
+      StreamingQuery query = wordCounts.writeStream()
+          .outputMode("complete")
+          .format("console")
+          .start();
+      query.awaitTermination();
+
+    } catch (StreamingQueryException | TimeoutException exception) {
+      exception.printStackTrace();
     }
 
-    public static void main(String[] args) {
-        System.out.println(new App().getGreeting());
-    }
+  }
 }
