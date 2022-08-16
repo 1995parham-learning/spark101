@@ -6,13 +6,16 @@ package donbal;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.streaming.StreamingQuery;
 import org.apache.spark.sql.streaming.StreamingQueryException;
-import org.apache.spark.sql.Row;
 
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 
 import org.apache.spark.api.java.function.FlatMapFunction;
+import static org.apache.spark.sql.functions.from_json;
+import static org.apache.spark.sql.functions.col;
+import static org.apache.spark.sql.functions.window;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
 
@@ -26,28 +29,36 @@ public class App {
 
     // create DataFrame representing the stream of input lines from connection to
     // localhost:1378.
-    // use server.py to have server on 1378
-    Dataset<Row> lines = spark
+    // use server.py to have server on 1378 that sends messages.
+    // please note that columns by default named as value.
+    Dataset<Message> messages = spark
         .readStream()
         .format("socket")
         .option("host", "localhost")
         .option("port", 1378)
-        .load();
+        .load()
+        .withColumn("message", from_json(col("value"), Encoders.bean(Message.class).schema()))
+        .select("message.*").as(Encoders.bean(Message.class));
 
     // split the lines into words with space
-    Dataset<String> words = lines
-        .as(Encoders.STRING())
-        .flatMap(new FlatMapFunction<String, String>() {
-
+    Dataset<Message> words = messages
+        .flatMap(new FlatMapFunction<Message, Message>() {
           @Override
-          public Iterator<String> call(String t) throws Exception {
-            return Arrays.asList(t.split(" ")).iterator();
+          public Iterator<Message> call(Message t) throws Exception {
+            return Arrays.asList(t.getLine().split(" ")).stream().map(new Function<String, Message>() {
+              @Override
+              public Message apply(String word) {
+                return new Message(word, t.getTimestamp());
+              }
+            }).iterator();
           }
-
-        }, Encoders.STRING());
+        }, Encoders.bean(Message.class));
 
     // groups words if they are the same and then count them.
-    Dataset<WordCount> wordCounts = words.groupBy("value").count().as(Encoders.bean(WordCount.class));
+    Dataset<WordCount> wordCounts = words.groupBy(
+        window(col("timestamp"), "10 minutes", "5 minutes"), col("line").as("value"))
+        .count()
+        .as(Encoders.bean(WordCount.class));
 
     // start running the query that prints the running counts to the console
     try {
