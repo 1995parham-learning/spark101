@@ -4,6 +4,7 @@
 package donbal;
 
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.streaming.OutputMode;
 import org.apache.spark.sql.streaming.StreamingQuery;
 import org.apache.spark.sql.streaming.StreamingQueryException;
 
@@ -40,6 +41,8 @@ public class App {
         .withColumn("message", from_json(col("value"), Encoders.bean(Message.class).schema()))
         .select("message.*").as(Encoders.bean(Message.class));
 
+    messages.printSchema();
+
     // split the lines into words with space
     Dataset<Message> words = messages
         .flatMap(new FlatMapFunction<Message, Message>() {
@@ -63,9 +66,12 @@ public class App {
     // start running the query that prints the running counts to the console
     try {
       StreamingQuery query = wordCounts.writeStream()
-          .outputMode("complete")
+          .outputMode(OutputMode.Complete())
+          // use update-mode for checking the messages stream without aggreation.
+          // .outputMode(OutputMode.Update())
           .format("console")
           .start();
+
       query.awaitTermination();
 
     } catch (StreamingQueryException | TimeoutException exception) {
