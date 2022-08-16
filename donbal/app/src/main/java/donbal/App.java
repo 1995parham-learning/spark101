@@ -59,7 +59,7 @@ public class App {
 
     // groups words if they are the same and then count them.
     Dataset<WordCount> wordCounts = words.groupBy(
-        window(col("timestamp"), "10 minutes", "5 minutes"), col("line").as("value"))
+        window(col("timestamp"), "10 seconds", "5 seconds"), col("line").as("value"))
         .count()
         .as(Encoders.bean(WordCount.class));
 
