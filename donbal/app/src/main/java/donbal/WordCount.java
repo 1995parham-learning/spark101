@@ -1,19 +1,15 @@
 package donbal;
 
 import java.math.BigInteger;
+import java.time.Instant;
+
+import scala.Tuple2;
 
 public class WordCount {
   private String value;
   private BigInteger count;
-  private String window;
 
-  public String getWindow() {
-    return window;
-  }
-
-  public void setWindow(String window) {
-    this.window = window;
-  }
+  private Tuple2<Instant, Instant> window;
 
   public String getValue() {
     return value;
@@ -29,6 +25,14 @@ public class WordCount {
 
   public void setCount(BigInteger count) {
     this.count = count;
+  }
+
+  public Tuple2<Instant, Instant> getWindow() {
+    return window;
+  }
+
+  public void setWindow(Tuple2<Instant, Instant> window) {
+    this.window = window;
   }
 
 }
